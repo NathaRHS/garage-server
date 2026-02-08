@@ -17,15 +17,39 @@ app.use(cors()); // Active CORS pour les requêtes cross-origin
 app.use(express.json()); // Parse les requêtes JSON
 
 // ============== CONFIGURATION FIREBASE ==============
-const serviceAccountPath = path.join(__dirname, './serviceAccountKey.json');
 let db = null;
 let useFirebase = false;
 
 // Tente d'initialiser Firebase Firestore
-if (fs.existsSync(serviceAccountPath)) {
+let firebaseCredentials = null;
+
+// Priorité 1: Lire depuis la variable d'environnement (pour Railway)
+if (process.env.FIREBASE_CREDENTIALS_JSON) {
+  try {
+    firebaseCredentials = JSON.parse(process.env.FIREBASE_CREDENTIALS_JSON);
+  } catch (err) {
+    console.error('Erreur parsing FIREBASE_CREDENTIALS_JSON:', err.message);
+  }
+}
+
+// Priorité 2: Lire depuis le fichier local (pour développement local)
+if (!firebaseCredentials) {
+  const serviceAccountPath = path.join(__dirname, './serviceAccountKey.json');
+  if (fs.existsSync(serviceAccountPath)) {
+    try {
+      const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
+      firebaseCredentials = JSON.parse(fileContent);
+    } catch (err) {
+      console.error('Erreur lecture serviceAccountKey.json:', err.message);
+    }
+  }
+}
+
+// Initialiser Firebase si les credentials sont disponibles
+if (firebaseCredentials) {
   try {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccountPath),
+      credential: admin.credential.cert(firebaseCredentials),
     });
     db = admin.firestore();
     useFirebase = true;

@@ -282,6 +282,160 @@ app.get('/api/pieces', async (req, res) => {
   }
 });
 
+// ============== ENDPOINTS SLOTS RÉPARATION ==============
+
+// GET tous les slots de réparation
+app.get('/api/slotReparation', async (req, res) => {
+  try {
+    let slots;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('slotReparation').get();
+      slots = snapshot.docs
+        .filter(doc => doc.id !== '_metadata')
+        .map(doc => ({ id: doc.id, ...doc.data() }));
+    } else {
+      slots = [];
+    }
+
+    res.json(slots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET un slot de réparation par ID
+app.get('/api/slotReparation/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      const doc = await db.collection('slotReparation').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Slot non trouvé' });
+      }
+      res.json({ id: doc.id, ...doc.data() });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer un slot de réparation
+app.post('/api/slotReparation', async (req, res) => {
+  try {
+    const { idReparation, startTime } = req.body;
+    
+    if (!idReparation || !startTime) {
+      return res.status(400).json({ error: 'idReparation et startTime sont requis' });
+    }
+    
+    if (useFirebase) {
+      const docRef = await db.collection('slotReparation').add({
+        idReparation,
+        startTime: new Date(startTime),
+        createdAt: new Date()
+      });
+      res.json({ id: docRef.id, message: 'Slot créé avec succès' });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE un slot de réparation
+app.delete('/api/slotReparation/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      await db.collection('slotReparation').doc(req.params.id).delete();
+      res.json({ message: 'Slot supprimé avec succès' });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============== ENDPOINTS SLOTS ATTENTE ==============
+
+// GET tous les slots d'attente
+app.get('/api/slotAttente', async (req, res) => {
+  try {
+    let slots;
+    
+    if (useFirebase) {
+      const snapshot = await db.collection('slotAttente').get();
+      slots = snapshot.docs
+        .filter(doc => doc.id !== '_metadata')
+        .map(doc => ({ id: doc.id, ...doc.data() }));
+    } else {
+      slots = [];
+    }
+    
+    res.json(slots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET un slot d'attente par ID
+app.get('/api/slotAttente/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      const doc = await db.collection('slotAttente').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Slot non trouvé' });
+      }
+      res.json({ id: doc.id, ...doc.data() });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer un slot d'attente
+app.post('/api/slotAttente', async (req, res) => {
+  try {
+    const { idReparation, startTime } = req.body;
+    
+    if (!idReparation || !startTime) {
+      return res.status(400).json({ error: 'idReparation et startTime sont requis' });
+    }
+    
+    if (useFirebase) {
+      const docRef = await db.collection('slotAttente').add({
+        idReparation,
+        startTime: new Date(startTime),
+        createdAt: new Date()
+      });
+      res.json({ id: docRef.id, message: 'Slot créé avec succès' });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE un slot d'attente
+app.delete('/api/slotAttente/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      await db.collection('slotAttente').doc(req.params.id).delete();
+      res.json({ message: 'Slot supprimé avec succès' });
+    } else {
+      res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINT SANTÉ ==============
 
 // GET vérifier l'état du serveur

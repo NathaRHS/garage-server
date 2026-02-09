@@ -300,6 +300,24 @@ app.get('/api/finReparation', async (req, res) => {
   }
 });
 
+// GET toutes les finReparationPieces (route principale sans paramètres)
+app.get('/api/finReparationPieces', async (req, res) => {
+  try {
+    let finReparations;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('finReparationPieces').get();
+      finReparations = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      finReparations = seedData.finReparationPieces || [];
+    }
+
+    res.json(finReparations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET fins de réparation pour une réparation donnée
 app.get('/api/finReparationPieces/reparation/:reparationId', async (req, res) => {
   try {

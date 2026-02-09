@@ -118,6 +118,59 @@ app.get('/api/voitures/:id', async (req, res) => {
   }
 });
 
+// POST créer une nouvelle voiture
+// body: { marque, proprietaireId, typeId }
+app.post('/api/voitures', async (req, res) => {
+  try {
+    const { marque, proprietaireId, typeId } = req.body;
+
+    if (!marque || !proprietaireId || !typeId) {
+      return res.status(400).json({
+        error: 'marque, proprietaireId et typeId sont requis'
+      });
+    }
+
+    if (useFirebase) {
+      // Récupérer les données du propriétaire et du type
+      const propDoc = await db.collection('proprietaires').doc(proprietaireId).get();
+      const typeDoc = await db.collection('typesVoiture').doc(typeId).get();
+
+      if (!propDoc.exists) {
+        return res.status(404).json({ error: 'Propriétaire non trouvé' });
+      }
+      if (!typeDoc.exists) {
+        return res.status(404).json({ error: 'Type de voiture non trouvé' });
+      }
+
+      const now = new Date();
+      const voiture = {
+        marque,
+        proprietaire: {
+          _id: proprietaireId,
+          nom: propDoc.data().nom,
+          prenom: propDoc.data().prenom
+        },
+        type: {
+          _id: typeId,
+          nomType: typeDoc.data().nomType
+        },
+        reparations: [],
+        createdAt: now,
+        updatedAt: now
+      };
+
+      // Créer un nouvel ID pour la voiture
+      const docRef = await db.collection('voitures').add(voiture);
+      const doc = await docRef.get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINTS CLIENTS ==============
 
 // GET tous les clients

@@ -182,6 +182,67 @@ app.get('/api/proprietaires', async (req, res) => {
   }
 });
 
+// GET propriétaire par ID
+app.get('/api/proprietaires/:id', async (req, res) => {
+  try {
+    let proprietaire;
+
+    if (useFirebase) {
+      const doc = await db.collection('proprietaires').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Propriétaire non trouvé' });
+      }
+      proprietaire = { _id: doc.id, ...doc.data() };
+    } else {
+      const all = seedData.proprietaires || [];
+      proprietaire = all.find(p => p._id === req.params.id);
+      if (!proprietaire) {
+        return res.status(404).json({ error: 'Propriétaire non trouvé' });
+      }
+    }
+
+    res.json(proprietaire);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer/inscrire un nouveau propriétaire (login/signup)
+// body: { uid, email, nom, prenom }
+// uid = id Firebase Auth
+app.post('/api/proprietaires', async (req, res) => {
+  try {
+    const { uid, email, nom, prenom } = req.body;
+
+    if (!uid || !email || !nom || !prenom) {
+      return res.status(400).json({
+        error: 'uid, email, nom et prenom sont requis'
+      });
+    }
+
+    if (useFirebase) {
+      const now = new Date();
+      const proprietaire = {
+        email,
+        nom,
+        prenom,
+        voitures: [],
+        createdAt: now,
+        updatedAt: now
+      };
+
+      // Créer le document avec l'uid Firebase comme ID
+      await db.collection('proprietaires').doc(uid).set(proprietaire);
+      const doc = await db.collection('proprietaires').doc(uid).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINTS RÉPARATIONS ==============
 
 // GET toutes les réparations

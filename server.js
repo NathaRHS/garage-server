@@ -13,21 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://garage-server-production-9c30.up.railway.app'
-];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS policy: Origin not allowed'), false);
-  }
-}));
-
+app.use(cors()); // Active CORS pour les requêtes cross-origin
 app.use(express.json()); // Parse les requêtes JSON
 
 // ============== CONFIGURATION FIREBASE ==============
@@ -452,7 +438,44 @@ app.delete('/api/finReparationPieces', async (req, res) => {
 });
 
 // RESET COMPLET finReparationPieces
+app.get('/api/finReparationPieces/reset', async (req, res) => {
+  try {
+    let deletedCount = 0;
 
+    if (useFirebase && db) {
+      const snap = await db.collection('finReparationPieces').get();
+      if (!snap.empty) {
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        deletedCount = snap.size;
+      }
+      return res.json({
+        message: 'finReparationPieces vidé complètement',
+        mode: 'firebase',
+        deleted: deletedCount
+      });
+    } else {
+      if (Array.isArray(seedData.finReparationPieces)) {
+        deletedCount = seedData.finReparationPieces.length;
+        seedData.finReparationPieces = [];
+        try {
+          fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+        } catch (err) {
+          console.error('Erreur écriture seedData.json :', err);
+        }
+      }
+      return res.json({
+        message: 'finReparationPieces vidé complètement',
+        mode: 'json',
+        deleted: deletedCount
+      });
+    }
+  } catch (err) {
+    console.error('Erreur reset finReparationPieces:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ============== ENDPOINTS TYPES & PIÈCES ==============
 

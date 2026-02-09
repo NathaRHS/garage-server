@@ -436,6 +436,92 @@ app.delete('/api/slotAttente/:id', async (req, res) => {
   }
 });
 
+// ============== ENDPOINTS NOTIFICATIONS ==============
+
+// GET toutes les notifications
+app.get('/api/notifications', async (req, res) => {
+  try {
+    let notifications;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('notifications').get();
+      notifications = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      notifications = seedData.notifications || [];
+    }
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET une notification par ID
+app.get('/api/notifications/:id', async (req, res) => {
+  try {
+    let notification;
+
+    if (useFirebase) {
+      const doc = await db.collection('notifications').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Notification non trouvée' });
+      }
+      notification = { _id: doc.id, ...doc.data() };
+    } else {
+      notification = seedData.notifications?.find(n => n._id === req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: 'Notification non trouvée' });
+      }
+    }
+
+    res.json(notification);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET notifications par voiture
+app.get('/api/notifications/voiture/:voitureId', async (req, res) => {
+  try {
+    let notifications;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('notifications')
+        .where('voitureId', '==', req.params.voitureId)
+        .get();
+      notifications = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      notifications = (seedData.notifications || []).filter(
+        n => n.voitureId === req.params.voitureId
+      );
+    }
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET notifications non lues
+app.get('/api/notifications/unread', async (req, res) => {
+  try {
+    let notifications;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('notifications')
+        .where('read', '==', false)
+        .get();
+      notifications = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      notifications = (seedData.notifications || []).filter(n => !n.read);
+    }
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINT SANTÉ ==============
 
 // GET vérifier l'état du serveur

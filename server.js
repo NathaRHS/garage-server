@@ -224,7 +224,63 @@ app.get('/api/reparations/voiture/:voitureId', async (req, res) => {
   }
 });
 
-// ============== ENDPOINTS FIN RÉPARATION ==============
+// GET une réparation par ID
+app.get('/api/reparations/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    let reparation = null;
+
+    if (useFirebase) {
+      const doc = await db.collection('reparations').doc(id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Réparation non trouvée' });
+      }
+      reparation = { _id: doc.id, ...doc.data() };
+    } else {
+      const all = seedData.reparations || [];
+      reparation = all.find(r =>
+        r._id === id ||
+        r.id === id ||
+        r.code === id ||
+        r.idReparation === id
+      );
+      if (!reparation) {
+        return res.status(404).json({ error: 'Réparation non trouvée' });
+      }
+    }
+
+    res.json(reparation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT mettre à jour le statut d'une réparation
+app.put('/api/reparations/:id', async (req, res) => {
+  try {
+    const { statut } = req.body;
+
+    if (!statut) {
+      return res.status(400).json({ error: 'Le champ statut est requis' });
+    }
+
+    if (useFirebase) {
+      await db.collection('reparations').doc(req.params.id).update({ statut });
+      const doc = await db.collection('reparations').doc(req.params.id).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      const all = seedData.reparations || [];
+      const reparation = all.find(r => r._id === req.params.id);
+      if (!reparation) {
+        return res.status(404).json({ error: 'Réparation non trouvée' });
+      }
+      reparation.statut = statut;
+      return res.json(reparation);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET toutes les fins de réparation
 app.get('/api/finReparation', async (req, res) => {
@@ -240,6 +296,183 @@ app.get('/api/finReparation', async (req, res) => {
 
     res.json(finReparations);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET fins de réparation pour une réparation donnée
+app.get('/api/finReparationPieces/reparation/:reparationId', async (req, res) => {
+  try {
+    let finReparations;
+
+    if (useFirebase) {
+      const snapshot = await db
+        .collection('finReparationPieces')
+        .where('reparation._id', '==', req.params.reparationId)
+        .get();
+      finReparations = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      const all = seedData.finReparationPieces || [];
+      finReparations = all.filter(fr => fr.reparation && fr.reparation._id === req.params.reparationId);
+    }
+
+    res.json(finReparations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET une fin de réparation par ID
+app.get('/api/finReparationPieces/:id', async (req, res) => {
+  try {
+    let finReparation;
+
+    if (useFirebase) {
+      const doc = await db.collection('finReparationPieces').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Fin de réparation non trouvée' });
+      }
+      finReparation = { _id: doc.id, ...doc.data() };
+    } else {
+      const all = seedData.finReparationPieces || [];
+      finReparation = all.find(fr => fr._id === req.params.id);
+      if (!finReparation) {
+        return res.status(404).json({ error: 'Fin de réparation non trouvée' });
+      }
+    }
+
+    res.json(finReparation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer une nouvelle fin de réparation pour une pièce
+app.post('/api/finReparationPieces', async (req, res) => {
+  try {
+    const { reparation, piece, dateFinReparation } = req.body;
+
+    if (!reparation || !piece || !dateFinReparation) {
+      return res.status(400).json({
+        error: 'reparation, piece et dateFinReparation sont requis'
+      });
+    }
+
+    if (useFirebase) {
+      const docRef = await db.collection('finReparationPieces').add({
+        reparation,
+        piece,
+        dateFinReparation: new Date(dateFinReparation),
+        createdAt: new Date()
+      });
+      const doc = await docRef.get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT mettre à jour la date de fin
+app.put('/api/finReparationPieces/:id', async (req, res) => {
+  try {
+    const { dateFinReparation } = req.body;
+
+    if (!dateFinReparation) {
+      return res.status(400).json({ error: 'Le champ dateFinReparation est requis' });
+    }
+
+    if (useFirebase) {
+      await db.collection('finReparationPieces').doc(req.params.id).update({
+        dateFinReparation: new Date(dateFinReparation),
+        updatedAt: new Date()
+      });
+      const doc = await db.collection('finReparationPieces').doc(req.params.id).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE fin de réparation individuelle
+app.delete('/api/finReparationPieces/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      await db.collection('finReparationPieces').doc(req.params.id).delete();
+      return res.json({ message: 'Fin de réparation supprimée avec succès' });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE COMPLET finReparationPieces
+app.delete('/api/finReparationPieces', async (req, res) => {
+  try {
+    if (!useFirebase) {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+
+    const snap = await db.collection('finReparationPieces').get();
+
+    if (snap.empty) {
+      return res.json({ message: 'Aucun document à supprimer', deleted: 0 });
+    }
+
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    res.json({ message: 'Tous les finReparationPieces ont été supprimés', deleted: snap.size });
+  } catch (err) {
+    console.error('Erreur suppression finReparationPieces:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// RESET COMPLET finReparationPieces
+app.get('/api/finReparationPieces/reset', async (req, res) => {
+  try {
+    let deletedCount = 0;
+
+    if (useFirebase && db) {
+      const snap = await db.collection('finReparationPieces').get();
+      if (!snap.empty) {
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        deletedCount = snap.size;
+      }
+      return res.json({
+        message: 'finReparationPieces vidé complètement',
+        mode: 'firebase',
+        deleted: deletedCount
+      });
+    } else {
+      if (Array.isArray(seedData.finReparationPieces)) {
+        deletedCount = seedData.finReparationPieces.length;
+        seedData.finReparationPieces = [];
+        try {
+          fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+        } catch (err) {
+          console.error('Erreur écriture seedData.json :', err);
+        }
+      }
+      return res.json({
+        message: 'finReparationPieces vidé complètement',
+        mode: 'json',
+        deleted: deletedCount
+      });
+    }
+  } catch (err) {
+    console.error('Erreur reset finReparationPieces:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -345,6 +578,70 @@ app.post('/api/slotReparation', async (req, res) => {
   }
 });
 
+// POST ASSIGNER une réparation à un slot FIXE
+app.post('/api/slotReparation/assign', async (req, res) => {
+  try {
+    const { idReparation } = req.body;
+
+    if (!idReparation) {
+      return res.status(400).json({ error: 'idReparation est requis' });
+    }
+
+    if (!useFirebase) {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+
+    const slotsCol = db.collection('slotReparation');
+    const slot1Ref = slotsCol.doc('1');
+    const slot2Ref = slotsCol.doc('2');
+
+    const [slot1Snap, slot2Snap] = await Promise.all([
+      slot1Ref.get(),
+      slot2Ref.get()
+    ]);
+
+    const now = new Date();
+
+    const isEmpty = (snap) => {
+      if (!snap.exists) return true;
+      const data = snap.data();
+      return !data.idReparation || data.idReparation === '';
+    };
+
+    let chosenSlotRef = null;
+    let chosenSlotNumber = null;
+
+    if (isEmpty(slot1Snap)) {
+      chosenSlotRef = slot1Ref;
+      chosenSlotNumber = 1;
+    } else if (isEmpty(slot2Snap)) {
+      chosenSlotRef = slot2Ref;
+      chosenSlotNumber = 2;
+    } else {
+      return res.status(400).json({ error: 'Les deux slots sont déjà occupés' });
+    }
+
+    await chosenSlotRef.set(
+      {
+        idReparation: idReparation,
+        startTime: now,
+        createdAt: now
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      message: 'Slot assigné avec succès',
+      slotNumber: chosenSlotNumber,
+      slotId: String(chosenSlotNumber),
+      idReparation: idReparation
+    });
+  } catch (err) {
+    console.error('Erreur assignation slotReparation:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE un slot de réparation
 app.delete('/api/slotReparation/:id', async (req, res) => {
   try {
@@ -407,17 +704,80 @@ app.post('/api/slotAttente', async (req, res) => {
       return res.status(400).json({ error: 'idReparation et startTime sont requis' });
     }
     
-    if (useFirebase) {
-      const docRef = await db.collection('slotAttente').add({
-        idReparation,
-        startTime: new Date(startTime),
-        createdAt: new Date()
-      });
-      res.json({ id: docRef.id, message: 'Slot créé avec succès' });
-    } else {
-      res.status(400).json({ error: 'Firebase non disponible' });
+    if (!useFirebase || !db) {
+      return res.status(400).json({ error: 'Firebase non disponible' });
     }
+
+    const coll = db.collection('slotAttente');
+    const now = new Date();
+
+    const baseData = {
+      idReparation,
+      startTime: new Date(startTime),
+      createdAt: now
+    };
+
+    // SLOT 1
+    const slot1Ref = coll.doc('1');
+    const slot1Snap = await slot1Ref.get();
+
+    if (!slot1Snap.exists) {
+      await slot1Ref.set({ ...baseData, slotId: 1 });
+      return res.json({
+        id: '1',
+        slotId: 1,
+        message: 'Slot d\'attente créé sur la position 1'
+      });
+    }
+
+    // SLOT 2
+    const slot2Ref = coll.doc('2');
+    const slot2Snap = await slot2Ref.get();
+
+    if (!slot2Snap.exists) {
+      await slot2Ref.set({ ...baseData, slotId: 2 });
+      return res.json({
+        id: '2',
+        slotId: 2,
+        message: 'Slot d\'attente créé sur la position 2'
+      });
+    }
+
+    // AUCUN SLOT LIBRE
+    return res.status(409).json({
+      error: 'Aucun slot d\'attente disponible (1 et 2 déjà occupés)'
+    });
   } catch (err) {
+    console.error('Erreur /api/slotAttente :', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// RESET COMPLET de la collection slotAttente
+app.get('/api/slotAttente/reset', async (req, res) => {
+  try {
+    if (!useFirebase) {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+
+    const colRef = db.collection('slotAttente');
+    const docs = await colRef.listDocuments();
+
+    if (docs.length === 0) {
+      return res.json({ success: true, deleted: 0, message: 'Aucun document slotAttente à supprimer' });
+    }
+
+    const batch = db.batch();
+    docs.forEach(doc => batch.delete(doc));
+    await batch.commit();
+
+    res.json({
+      success: true,
+      deleted: docs.length,
+      message: 'slotAttente vidé.'
+    });
+  } catch (err) {
+    console.error('Erreur reset slotAttente:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -435,6 +795,64 @@ app.delete('/api/slotAttente/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ============== ENDPOINTS NOTIFICATIONS ==============
+
+// Fonction pour mettre toutes les réparations en cours
+async function setAllReparationsEnCours(req, res) {
+  try {
+    let modified = 0;
+
+    if (useFirebase && db) {
+      // MODE FIREBASE : tous les docs "reparations" → EN_COURS
+      const snap = await db.collection('reparations').get();
+
+      if (!snap.empty) {
+        const batch = db.batch();
+        snap.docs.forEach(doc => {
+          batch.update(doc.ref, { statut: 'EN_COURS' });
+        });
+        await batch.commit();
+        modified = snap.size;
+      }
+
+      return res.json({
+        message: 'Statut mis à EN_COURS pour toutes les réparations',
+        mode: 'firebase',
+        modified
+      });
+    } else {
+      // MODE JSON LOCAL
+      const reps = seedData.reparations || [];
+      reps.forEach(r => {
+        r.statut = 'EN_COURS';
+      });
+
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json :', err);
+      }
+
+      modified = reps.length;
+
+      return res.json({
+        message: 'Statut mis à EN_COURS pour toutes les réparations',
+        mode: 'json',
+        modified
+      });
+    }
+  } catch (err) {
+    console.error('Erreur mise à jour statut EN_COURS :', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// PUT pour les appels "propres"
+app.put('/api/reparations/statut/en-cours', setAllReparationsEnCours);
+
+// GET pour que l'URL fonctionne dans le navigateur
+app.get('/api/reparations/statut/en-cours', setAllReparationsEnCours);
 
 // ============== ENDPOINTS NOTIFICATIONS ==============
 
@@ -536,7 +954,8 @@ app.get('/api/health', (req, res) => {
       proprietaires: seedData.proprietaires ? seedData.proprietaires.length : 0,
       reparations: seedData.reparations ? seedData.reparations.length : 0,
       finReparationPieces: seedData.finReparationPieces ? seedData.finReparationPieces.length : 0,
-      pieces: seedData.piecesReparables ? seedData.piecesReparables.length : 0
+      pieces: seedData.piecesReparables ? seedData.piecesReparables.length : 0,
+      notifications: seedData.notifications ? seedData.notifications.length : 0
     }
   });
 });

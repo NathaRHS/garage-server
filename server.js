@@ -369,6 +369,85 @@ app.get('/api/reparations/:id', async (req, res) => {
   }
 });
 
+// POST créer une nouvelle réparation
+// body: { voiture, pieces, statut, description, dateDebut }
+app.post('/api/reparations', async (req, res) => {
+  try {
+    const { voiture, pieces, statut, description, dateDebut } = req.body;
+
+    if (!voiture || !voiture._id) {
+      return res.status(400).json({
+        error: 'Le champ voiture avec _id est requis'
+      });
+    }
+
+    if (useFirebase) {
+      // Générer un ID séquentiel REP-XXX
+      const reparationsSnapshot = await db.collection('reparations').get();
+      let maxId = 0;
+      
+      reparationsSnapshot.docs.forEach(doc => {
+        const docId = doc.id;
+        if (docId.startsWith('REP-')) {
+          const num = parseInt(docId.replace('REP-', ''), 10);
+          if (num > maxId) maxId = num;
+        }
+      });
+
+      const newId = `REP-${String(maxId + 1).padStart(3, '0')}`;
+
+      const now = new Date();
+      const reparation = {
+        _id: newId,
+        voiture,
+        pieces: pieces || [],
+        statut: statut || 'EN_ATTENTE',
+        description: description || '',
+        dateDebut: dateDebut ? new Date(dateDebut) : now,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      await db.collection('reparations').doc(newId).set(reparation);
+      const doc = await db.collection('reparations').doc(newId).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      // Mode JSON local
+      const reparations = seedData.reparations || [];
+      const maxId = reparations.reduce((max, r) => {
+        if (r._id && r._id.startsWith('REP-')) {
+          const num = parseInt(r._id.replace('REP-', ''), 10);
+          return num > max ? num : max;
+        }
+        return max;
+      }, 0);
+
+      const newId = `REP-${String(maxId + 1).padStart(3, '0')}`;
+      const newReparation = {
+        _id: newId,
+        voiture,
+        pieces: pieces || [],
+        statut: statut || 'EN_ATTENTE',
+        description: description || '',
+        dateDebut: dateDebut ? new Date(dateDebut) : new Date()
+      };
+
+      reparations.push(newReparation);
+      seedData.reparations = reparations;
+
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json:', err);
+      }
+
+      return res.json(newReparation);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT mettre à jour le statut d'une réparation
 app.put('/api/reparations/:id', async (req, res) => {
   try {

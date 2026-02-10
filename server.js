@@ -1259,37 +1259,40 @@ app.post('/api/slotReparation/assign', async (req, res) => {
     const slotsCol = db.collection('slotReparation');
     const now = new Date();
 
-    let chosenSlotId = null;
-    let chosenSlotRef = null;
+    // Liste des slots gérés : 1, 2, 3
+    const slotIds = ['1', '2', '3'];
 
-    // Cherche le premier slot libre parmi 1, 2, 3
-    for (const slotId of SLOT_REPARATION_IDS) {
+    let chosenSlotRef = null;
+    let chosenSlotNumber = null;
+
+    // Cherche le premier slot libre
+    for (const slotId of slotIds) {
       const slotRef = slotsCol.doc(slotId);
       const snap = await slotRef.get();
 
       if (!snap.exists) {
-        // Slot inexistant = libre
-        chosenSlotId = slotId;
+        // Document inexistant → slot libre
         chosenSlotRef = slotRef;
+        chosenSlotNumber = slotId;
         break;
-      } else {
-        const data = snap.data() || {};
-        const currentRep = data.idReparation || '';
-        if (!currentRep) {
-          // Slot existant mais vide = libre
-          chosenSlotId = slotId;
-          chosenSlotRef = slotRef;
-          break;
-        }
+      }
+
+      const data = snap.data() || {};
+      const currentRep = data.idReparation || '';
+
+      if (!currentRep) {
+        // Doc existe mais idReparation vide → slot libre
+        chosenSlotRef = slotRef;
+        chosenSlotNumber = slotId;
+        break;
       }
     }
 
-    // Aucun slot libre (1, 2 et 3 occupés)
-    if (!chosenSlotId || !chosenSlotRef) {
+    // Aucun slot libre
+    if (!chosenSlotRef) {
       return res.status(400).json({ error: 'Les trois slots sont déjà occupés' });
     }
 
-    // Assigner la réparation au slot choisi
     await chosenSlotRef.set(
       {
         idReparation: idReparation,
@@ -1301,8 +1304,8 @@ app.post('/api/slotReparation/assign', async (req, res) => {
 
     return res.json({
       message: 'Slot assigné avec succès',
-      slotNumber: Number(chosenSlotId),
-      slotId: String(chosenSlotId),
+      slotNumber: Number(chosenSlotNumber),
+      slotId: String(chosenSlotNumber),
       idReparation: idReparation
     });
   } catch (err) {

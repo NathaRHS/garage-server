@@ -647,6 +647,301 @@ app.get('/api/pieces', async (req, res) => {
   }
 });
 
+// GET une pièce par ID
+app.get('/api/pieces/:id', async (req, res) => {
+  try {
+    let piece;
+
+    if (useFirebase) {
+      const doc = await db.collection('piecesReparables').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Pièce non trouvée' });
+      }
+      piece = { _id: doc.id, ...doc.data() };
+    } else {
+      piece = (seedData.piecesReparables || []).find(p => p._id === req.params.id);
+      if (!piece) {
+        return res.status(404).json({ error: 'Pièce non trouvée' });
+      }
+    }
+
+    res.json(piece);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET tous les types de pièces
+app.get('/api/typesPieces', async (req, res) => {
+  try {
+    let types;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('typesPieces').get();
+      types = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      types = seedData.typesPieces || [];
+    }
+
+    res.json(types);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET un type de pièce par ID
+app.get('/api/typesPieces/:id', async (req, res) => {
+  try {
+    let type;
+
+    if (useFirebase) {
+      const doc = await db.collection('typesPieces').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Type de pièce non trouvé' });
+      }
+      type = { _id: doc.id, ...doc.data() };
+    } else {
+      type = (seedData.typesPieces || []).find(t => t._id === req.params.id);
+      if (!type) {
+        return res.status(404).json({ error: 'Type de pièce non trouvé' });
+      }
+    }
+
+    res.json(type);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer une nouvelle pièce
+// body: { nomPieces, prix, typeId }
+app.post('/api/pieces', async (req, res) => {
+  try {
+    const { nomPieces, prix, typeId } = req.body;
+
+    if (!nomPieces || !prix || !typeId) {
+      return res.status(400).json({
+        error: 'nomPieces, prix et typeId sont requis'
+      });
+    }
+
+    if (useFirebase) {
+      // Récupérer les données du type
+      const typeDoc = await db.collection('typesPieces').doc(typeId).get();
+      if (!typeDoc.exists) {
+        return res.status(404).json({ error: 'Type de pièce non trouvé' });
+      }
+
+      const now = new Date();
+      const piece = {
+        nomPieces,
+        prix: parseFloat(prix),
+        type: {
+          _id: typeId,
+          nomTypePieces: typeDoc.data().nomTypePieces
+        },
+        createdAt: now,
+        updatedAt: now
+      };
+
+      // Générer un ID séquentiel PR-XXX
+      const piecesSnapshot = await db.collection('piecesReparables').get();
+      const count = piecesSnapshot.size + 1;
+      const newId = `PR-${String(count).padStart(3, '0')}`;
+
+      await db.collection('piecesReparables').doc(newId).set(piece);
+      const doc = await db.collection('piecesReparables').doc(newId).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      // Mode JSON local
+      const pieces = seedData.piecesReparables || [];
+      const type = (seedData.typesPieces || []).find(t => t._id === typeId);
+      
+      if (!type) {
+        return res.status(404).json({ error: 'Type de pièce non trouvé' });
+      }
+
+      const newId = `PR-${String(pieces.length + 1).padStart(3, '0')}`;
+      const newPiece = {
+        _id: newId,
+        nomPieces,
+        prix: parseFloat(prix),
+        type: {
+          _id: typeId,
+          nomTypePieces: type.nomTypePieces
+        }
+      };
+
+      pieces.push(newPiece);
+      seedData.piecesReparables = pieces;
+      
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json:', err);
+      }
+
+      return res.json(newPiece);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT modifier une pièce
+// body: { nomPieces, prix, typeId }
+app.put('/api/pieces/:id', async (req, res) => {
+  try {
+    const { nomPieces, prix, typeId } = req.body;
+
+    if (!nomPieces && !prix && !typeId) {
+      return res.status(400).json({
+        error: 'Au moins un champ (nomPieces, prix ou typeId) est requis'
+      });
+    }
+
+    if (useFirebase) {
+      const piecesRef = db.collection('piecesReparables').doc(req.params.id);
+      const pieceDoc = await piecesRef.get();
+      
+      if (!pieceDoc.exists) {
+        return res.status(404).json({ error: 'Pièce non trouvée' });
+      }
+
+      const updateData = {
+        updatedAt: new Date()
+      };
+
+      if (nomPieces) updateData.nomPieces = nomPieces;
+      if (prix) updateData.prix = parseFloat(prix);
+      
+      if (typeId) {
+        const typeDoc = await db.collection('typesPieces').doc(typeId).get();
+        if (!typeDoc.exists) {
+          return res.status(404).json({ error: 'Type de pièce non trouvé' });
+        }
+        updateData.type = {
+          _id: typeId,
+          nomTypePieces: typeDoc.data().nomTypePieces
+        };
+      }
+
+      await piecesRef.update(updateData);
+      const doc = await piecesRef.get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      // Mode JSON local
+      const pieces = seedData.piecesReparables || [];
+      const piece = pieces.find(p => p._id === req.params.id);
+      
+      if (!piece) {
+        return res.status(404).json({ error: 'Pièce non trouvée' });
+      }
+
+      if (nomPieces) piece.nomPieces = nomPieces;
+      if (prix) piece.prix = parseFloat(prix);
+      
+      if (typeId) {
+        const type = (seedData.typesPieces || []).find(t => t._id === typeId);
+        if (!type) {
+          return res.status(404).json({ error: 'Type de pièce non trouvé' });
+        }
+        piece.type = {
+          _id: typeId,
+          nomTypePieces: type.nomTypePieces
+        };
+      }
+
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json:', err);
+      }
+
+      return res.json(piece);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE supprimer une pièce
+app.delete('/api/pieces/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      await db.collection('piecesReparables').doc(req.params.id).delete();
+      return res.json({ message: 'Pièce supprimée avec succès' });
+    } else {
+      // Mode JSON local
+      const pieces = seedData.piecesReparables || [];
+      const index = pieces.findIndex(p => p._id === req.params.id);
+      
+      if (index === -1) {
+        return res.status(404).json({ error: 'Pièce non trouvée' });
+      }
+
+      pieces.splice(index, 1);
+      seedData.piecesReparables = pieces;
+
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json:', err);
+      }
+
+      return res.json({ message: 'Pièce supprimée avec succès' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer un nouveau type de pièce
+// body: { nomTypePieces }
+app.post('/api/typesPieces', async (req, res) => {
+  try {
+    const { nomTypePieces } = req.body;
+
+    if (!nomTypePieces) {
+      return res.status(400).json({ error: 'nomTypePieces est requis' });
+    }
+
+    if (useFirebase) {
+      const now = new Date();
+      const type = {
+        nomTypePieces,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const docRef = await db.collection('typesPieces').add(type);
+      const doc = await docRef.get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      // Mode JSON local
+      const types = seedData.typesPieces || [];
+      const newId = `TP-${String(types.length + 1).padStart(3, '0')}`;
+      const newType = {
+        _id: newId,
+        nomTypePieces
+      };
+
+      types.push(newType);
+      seedData.typesPieces = types;
+
+      try {
+        fs.writeFileSync(seedDataPath, JSON.stringify(seedData, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Erreur écriture seedData.json:', err);
+      }
+
+      return res.json(newType);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINTS SLOTS RÉPARATION ==============
 
 // GET tous les slots de réparation

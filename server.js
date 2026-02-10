@@ -1243,7 +1243,6 @@ app.post('/api/slotReparation', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // POST ASSIGNER une réparation à un slot (1, 2 ou 3)
 app.post('/api/slotReparation/assign', async (req, res) => {
   try {
@@ -1277,7 +1276,7 @@ app.post('/api/slotReparation/assign', async (req, res) => {
         const data = snap.data() || {};
         const currentRep = data.idReparation || '';
         if (!currentRep) {
-          // Slot existant mais vide
+          // Slot existant mais vide = libre
           chosenSlotId = slotId;
           chosenSlotRef = slotRef;
           break;
@@ -1285,11 +1284,12 @@ app.post('/api/slotReparation/assign', async (req, res) => {
       }
     }
 
-    if (!chosenSlotRef || !chosenSlotId) {
-      // 1, 2 et 3 sont pleins
+    // Aucun slot libre (1, 2 et 3 occupés)
+    if (!chosenSlotId || !chosenSlotRef) {
       return res.status(400).json({ error: 'Les trois slots sont déjà occupés' });
     }
 
+    // Assigner la réparation au slot choisi
     await chosenSlotRef.set(
       {
         idReparation: idReparation,

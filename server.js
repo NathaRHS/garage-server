@@ -688,6 +688,166 @@ app.get('/api/finReparationPieces/reset', async (req, res) => {
   }
 });
 
+// ============== ENDPOINTS HISTORIQUE PAIEMENT ==============
+
+// GET tous les paiements
+app.get('/api/historiquePaiement', async (req, res) => {
+  try {
+    let paiements;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('historiquePaiement').get();
+      paiements = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      paiements = seedData.historiquePaiement || [];
+    }
+
+    res.json(paiements);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET un paiement par ID
+app.get('/api/historiquePaiement/:id', async (req, res) => {
+  try {
+    let paiement;
+
+    if (useFirebase) {
+      const doc = await db.collection('historiquePaiement').doc(req.params.id).get();
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'Paiement non trouvé' });
+      }
+      paiement = { _id: doc.id, ...doc.data() };
+    } else {
+      const all = seedData.historiquePaiement || [];
+      paiement = all.find(p => p._id === req.params.id);
+      if (!paiement) {
+        return res.status(404).json({ error: 'Paiement non trouvé' });
+      }
+    }
+
+    res.json(paiement);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET paiements par réparation
+app.get('/api/historiquePaiement/reparation/:reparationId', async (req, res) => {
+  try {
+    let paiements;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('historiquePaiement')
+        .where('reparationId', '==', req.params.reparationId)
+        .get();
+      paiements = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      const all = seedData.historiquePaiement || [];
+      paiements = all.filter(p => p.reparationId === req.params.reparationId);
+    }
+
+    res.json(paiements);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET paiements par client
+app.get('/api/historiquePaiement/client/:clientId', async (req, res) => {
+  try {
+    let paiements;
+
+    if (useFirebase) {
+      const snapshot = await db.collection('historiquePaiement')
+        .where('clientId', '==', req.params.clientId)
+        .get();
+      paiements = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    } else {
+      const all = seedData.historiquePaiement || [];
+      paiements = all.filter(p => p.clientId === req.params.clientId);
+    }
+
+    res.json(paiements);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer un nouveau paiement
+app.post('/api/historiquePaiement', async (req, res) => {
+  try {
+    const { reparationId, clientId, montant, datePaiement, methode, statut, notes, numReference } = req.body;
+
+    if (!reparationId || !clientId || !montant || !datePaiement) {
+      return res.status(400).json({
+        error: 'reparationId, clientId, montant et datePaiement sont requis'
+      });
+    }
+
+    if (useFirebase) {
+      const docRef = await db.collection('historiquePaiement').add({
+        reparationId,
+        clientId,
+        montant,
+        datePaiement: new Date(datePaiement),
+        methode: methode || 'especes',
+        statut: statut || 'validé',
+        notes: notes || '',
+        numReference: numReference || '',
+        createdAt: new Date()
+      });
+      const doc = await docRef.get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT mettre à jour un paiement
+app.put('/api/historiquePaiement/:id', async (req, res) => {
+  try {
+    const { montant, datePaiement, methode, statut, notes, numReference } = req.body;
+
+    const updateData = {};
+    if (montant !== undefined) updateData.montant = montant;
+    if (datePaiement !== undefined) updateData.datePaiement = new Date(datePaiement);
+    if (methode !== undefined) updateData.methode = methode;
+    if (statut !== undefined) updateData.statut = statut;
+    if (notes !== undefined) updateData.notes = notes;
+    if (numReference !== undefined) updateData.numReference = numReference;
+    updateData.updatedAt = new Date();
+
+    if (useFirebase) {
+      await db.collection('historiquePaiement').doc(req.params.id).update(updateData);
+      const doc = await db.collection('historiquePaiement').doc(req.params.id).get();
+      return res.json({ _id: doc.id, ...doc.data() });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE un paiement
+app.delete('/api/historiquePaiement/:id', async (req, res) => {
+  try {
+    if (useFirebase) {
+      await db.collection('historiquePaiement').doc(req.params.id).delete();
+      return res.json({ message: 'Paiement supprimé avec succès' });
+    } else {
+      return res.status(400).json({ error: 'Firebase non disponible' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============== ENDPOINTS TYPES & PIÈCES ==============
 
 // GET tous les types de voiture

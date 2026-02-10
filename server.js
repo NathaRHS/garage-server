@@ -1244,7 +1244,7 @@ app.post('/api/slotReparation', async (req, res) => {
   }
 });
 
-// POST ASSIGNER une réparation à un slot FIXE
+// POST ASSIGNER une réparation à un slot (1, 2 ou 3)
 app.post('/api/slotReparation/assign', async (req, res) => {
   try {
     const { idReparation } = req.body;
@@ -1253,38 +1253,41 @@ app.post('/api/slotReparation/assign', async (req, res) => {
       return res.status(400).json({ error: 'idReparation est requis' });
     }
 
-    if (!useFirebase) {
+    if (!useFirebase || !db) {
       return res.status(400).json({ error: 'Firebase non disponible' });
     }
 
     const slotsCol = db.collection('slotReparation');
-    const slot1Ref = slotsCol.doc('1');
-    const slot2Ref = slotsCol.doc('2');
-
-    const [slot1Snap, slot2Snap] = await Promise.all([
-      slot1Ref.get(),
-      slot2Ref.get()
-    ]);
-
     const now = new Date();
 
-    const isEmpty = (snap) => {
-      if (!snap.exists) return true;
-      const data = snap.data();
-      return !data.idReparation || data.idReparation === '';
-    };
-
+    let chosenSlotId = null;
     let chosenSlotRef = null;
-    let chosenSlotNumber = null;
 
-    if (isEmpty(slot1Snap)) {
-      chosenSlotRef = slot1Ref;
-      chosenSlotNumber = 1;
-    } else if (isEmpty(slot2Snap)) {
-      chosenSlotRef = slot2Ref;
-      chosenSlotNumber = 2;
-    } else {
-      return res.status(400).json({ error: 'Les deux slots sont déjà occupés' });
+    // Cherche le premier slot libre parmi 1, 2, 3
+    for (const slotId of SLOT_REPARATION_IDS) {
+      const slotRef = slotsCol.doc(slotId);
+      const snap = await slotRef.get();
+
+      if (!snap.exists) {
+        // Slot inexistant = libre
+        chosenSlotId = slotId;
+        chosenSlotRef = slotRef;
+        break;
+      } else {
+        const data = snap.data() || {};
+        const currentRep = data.idReparation || '';
+        if (!currentRep) {
+          // Slot existant mais vide
+          chosenSlotId = slotId;
+          chosenSlotRef = slotRef;
+          break;
+        }
+      }
+    }
+
+    if (!chosenSlotRef || !chosenSlotId) {
+      // 1, 2 et 3 sont pleins
+      return res.status(400).json({ error: 'Les trois slots sont déjà occupés' });
     }
 
     await chosenSlotRef.set(
@@ -1298,8 +1301,8 @@ app.post('/api/slotReparation/assign', async (req, res) => {
 
     return res.json({
       message: 'Slot assigné avec succès',
-      slotNumber: chosenSlotNumber,
-      slotId: String(chosenSlotNumber),
+      slotNumber: Number(chosenSlotId),
+      slotId: String(chosenSlotId),
       idReparation: idReparation
     });
   } catch (err) {
@@ -1307,6 +1310,7 @@ app.post('/api/slotReparation/assign', async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
 
 // DELETE un slot de réparation
 app.delete('/api/slotReparation/:id', async (req, res) => {
